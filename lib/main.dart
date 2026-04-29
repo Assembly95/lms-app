@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'assignment_screen.dart';
 
+import 'notice_screen.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -74,7 +76,14 @@ class HomeScreen extends StatelessWidget {
                     );
                   }),
                   _menuButton(Icons.calendar_today, '시간표', () {}),
-                  _menuButton(Icons.campaign, '공지', () {}),
+                  _menuButton(Icons.campaign, '공지', () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NoticeScreen(),
+                      ),
+                    );
+                  }),
                 ],
               ),
             ),
