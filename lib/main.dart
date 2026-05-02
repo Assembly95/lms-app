@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
 import 'package:flutter/material.dart';
 import 'assignment_screen.dart';
 import 'login_screen.dart';
@@ -19,8 +23,53 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  final String userName;
+  final int userNo;
+
+  const HomeScreen({super.key, required this.userName, required this.userNo});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int attendanceRate = 0;
+  int homeworkRate = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    loadHomeSummary();
+  }
+
+  Future<void> loadHomeSummary() async {
+    final DateTime now = DateTime.now();
+    final Uri url = Uri.parse(
+      'http://localhost:8089/api/app/home/summary?userNo=${widget.userNo}&year=${now.year}&month=${now.month}',
+    );
+
+    try {
+      final http.Response response = await http.get(url);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+
+        setState(() {
+          attendanceRate = data['attendanceRate'];
+          homeworkRate = data['homeworkRate'];
+        });
+
+        print('홈 요약 조회 성공: $data');
+      } else {
+        print('홈 요약 조회 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('홈 요약 조회 오류: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +82,9 @@ class HomeScreen extends StatelessWidget {
 
           children: [
             const SizedBox(height: 20),
-            const Text(
-              '김가별',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              '${widget.userName}님',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 30),
@@ -43,8 +92,16 @@ class HomeScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _donutChart(title: '출결', percent: 0.85, centerText: '85%'),
-                _donutChart(title: '숙제', percent: 0.70, centerText: '70%'),
+                _donutChart(
+                  title: '출결',
+                  percent: attendanceRate / 100,
+                  centerText: '$attendanceRate%',
+                ),
+                _donutChart(
+                  title: '숙제',
+                  percent: homeworkRate / 100,
+                  centerText: '$homeworkRate%',
+                ),
               ],
             ),
 

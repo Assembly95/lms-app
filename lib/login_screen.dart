@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'main.dart';
 
@@ -15,6 +16,37 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController idController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool rememberId = false;
+
+  static const String savedUserIdKey = 'savedUserId';
+
+  @override
+  void initState() {
+    super.initState();
+    loadSavedUserId();
+  }
+
+  Future<void> loadSavedUserId() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? savedUserId = prefs.getString(savedUserIdKey);
+
+    if (savedUserId != null && savedUserId.isNotEmpty) {
+      idController.text = savedUserId;
+      setState(() {
+        rememberId = true;
+      });
+    }
+  }
+
+  Future<void> saveUserIdIfNeeded(String userId) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    if (rememberId) {
+      await prefs.setString(savedUserIdKey, userId);
+    } else {
+      await prefs.remove(savedUserIdKey);
+    }
+  }
 
   @override
   void dispose() {
@@ -48,13 +80,20 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final String role = data['role'];
+        final String userName = data['userName'];
+        final int userNo = data['userNo'];
+
+        await saveUserIdIfNeeded(userId);
 
         print('로그인 성공: $data');
         print('role: $role');
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          MaterialPageRoute(
+            builder: (context) =>
+                HomeScreen(userName: userName, userNo: userNo),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -106,6 +145,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 36),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const SizedBox(),
+                    Row(
+                      children: [
+                        const Text('아이디 저장'),
+                        Checkbox(
+                          value: rememberId,
+                          onChanged: (value) {
+                            setState(() {
+                              rememberId = value ?? false;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 TextField(
                   controller: idController,
                   decoration: InputDecoration(
@@ -134,6 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
