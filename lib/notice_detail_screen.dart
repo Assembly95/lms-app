@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 class NoticeDetailScreen extends StatelessWidget {
   final String title;
@@ -44,7 +47,8 @@ class NoticeDetailScreen extends StatelessWidget {
   }
 
   List<Widget> _buildContentWidgets(String htmlText) {
-    final List<Widget> widgets = [];
+    final List<Widget> imageWidgets = [];
+    final List<Widget> textWidgets = [];
 
     final RegExp imageRegExp = RegExp(
       '<img[^>]+src=["\\\']([^"\\\']+)["\\\'][^>]*>',
@@ -55,12 +59,11 @@ class NoticeDetailScreen extends StatelessWidget {
 
     for (final RegExpMatch match in imageRegExp.allMatches(htmlText)) {
       final String beforeImage = htmlText.substring(currentIndex, match.start);
-
       final String cleanText = _stripHtml(beforeImage);
 
       if (cleanText.isNotEmpty) {
-        widgets.add(_textBlock(cleanText));
-        widgets.add(const SizedBox(height: 20));
+        textWidgets.add(_textBlock(cleanText));
+        textWidgets.add(const SizedBox(height: 20));
       }
 
       final String? imageSrc = match.group(1);
@@ -68,31 +71,14 @@ class NoticeDetailScreen extends StatelessWidget {
       debugPrint('공지 이미지 URL: $imageUrl');
 
       if (imageUrl != null) {
-        widgets.add(
+        imageWidgets.add(
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              imageUrl,
-              width: double.infinity,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                debugPrint('공지 이미지 로드 실패: $imageUrl');
-                debugPrint('오류: $error');
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text('이미지를 불러올 수 없습니다.'),
-                );
-              },
-            ),
+            child: _noticeImage(imageUrl),
           ),
         );
 
-        widgets.add(const SizedBox(height: 20));
+        imageWidgets.add(const SizedBox(height: 20));
       }
 
       currentIndex = match.end;
@@ -102,14 +88,76 @@ class NoticeDetailScreen extends StatelessWidget {
     final String cleanRemainingText = _stripHtml(remainingText);
 
     if (cleanRemainingText.isNotEmpty) {
-      widgets.add(_textBlock(cleanRemainingText));
+      textWidgets.add(_textBlock(cleanRemainingText));
     }
 
-    if (widgets.isEmpty) {
-      widgets.add(_textBlock(_stripHtml(htmlText)));
+    if (imageWidgets.isEmpty && textWidgets.isEmpty) {
+      textWidgets.add(_textBlock(_stripHtml(htmlText)));
     }
 
-    return widgets;
+    return [...imageWidgets, ...textWidgets];
+  }
+
+  Widget _noticeImage(String imageUrl) {
+    return FutureBuilder<Uint8List?>(
+      future: _loadImageBytes(imageUrl),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            width: double.infinity,
+            height: 180,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const CircularProgressIndicator(),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data == null) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('이미지를 불러올 수 없습니다.'),
+          );
+        }
+
+        return Image.memory(
+          snapshot.data!,
+          width: double.infinity,
+          fit: BoxFit.contain,
+        );
+      },
+    );
+  }
+
+  Future<Uint8List?> _loadImageBytes(String imageUrl) async {
+    try {
+      final http.Response response = await http.get(Uri.parse(imageUrl));
+
+      debugPrint('공지 이미지 응답 URL: $imageUrl');
+      debugPrint('공지 이미지 응답 status: ${response.statusCode}');
+      debugPrint('공지 이미지 응답 content-type: ${response.headers['content-type']}');
+      debugPrint('공지 이미지 응답 length: ${response.bodyBytes.length}');
+
+      if (response.bodyBytes.length >= 8) {
+        debugPrint('공지 이미지 앞 8바이트: ${response.bodyBytes.take(8).toList()}');
+      }
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      return response.bodyBytes;
+    } catch (e) {
+      debugPrint('공지 이미지 바이트 로드 실패: $e');
+      return null;
+    }
   }
 
   Widget _textBlock(String text) {
