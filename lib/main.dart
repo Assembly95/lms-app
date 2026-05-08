@@ -128,7 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AssignmentScreen(),
+                        builder: (context) =>
+                            AssignmentScreen(userNo: widget.userNo),
                       ),
                     );
                   }),

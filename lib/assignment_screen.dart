@@ -1,61 +1,110 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
 import 'assignment_detail_screen.dart';
 
-class AssignmentScreen extends StatelessWidget {
-  const AssignmentScreen({super.key});
+class AssignmentScreen extends StatefulWidget {
+  final int userNo;
+
+  const AssignmentScreen({super.key, required this.userNo});
+
+  @override
+  State<AssignmentScreen> createState() => _AssignmentScreenState();
+}
+
+class _AssignmentScreenState extends State<AssignmentScreen> {
+  bool isLoading = true;
+  List<Map<String, dynamic>> assignments = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadAssignments();
+  }
+
+  Future<void> loadAssignments() async {
+    final DateTime now = DateTime.now();
+    final Uri url = Uri.parse(
+      'http://localhost:8089/api/app/assignments?userNo=${widget.userNo}&year=${now.year}&month=${now.month}',
+    );
+
+    try {
+      final http.Response response = await http.get(url);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+
+        setState(() {
+          assignments = data.map((item) {
+            return {
+              'assignmentId': item['assignmentId'],
+              'title': item['title'] ?? '제목 없음',
+              'content': item['content'] ?? '',
+              'deadline': item['deadline'],
+              'status': item['status'] ?? '미제출',
+              'closed': item['closed'] ?? false,
+            };
+          }).toList();
+          isLoading = false;
+        });
+
+        print('숙제 목록 조회 성공: $data');
+      } else {
+        setState(() {
+          isLoading = false;
+        });
+        print('숙제 목록 조회 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+      print('숙제 목록 조회 오류: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final assignments = [
-      {
-        'title': '반복문 문제 풀기',
-        'due': 'D-1',
-        'status': '미제출',
-        'content': '반복문 문제를 풀고 사진으로 제출하세요.',
-      },
-      {
-        'title': '배열 문제 5개',
-        'due': 'D-3',
-        'status': '제출',
-        'content': '배열 문제 5개를 풀어 제출하세요.',
-      },
-      {
-        'title': '함수 개념 정리',
-        'due': 'D-0',
-        'status': '미제출',
-        'content': '함수 개념을 정리하고 제출하세요.',
-      },
-    ];
     return Scaffold(
       appBar: AppBar(title: const Text('숙제')),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: assignments.length,
-        itemBuilder: (context, index) {
-          final item = assignments[index];
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : assignments.isEmpty
+          ? const Center(child: Text('등록된 숙제가 없습니다.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: assignments.length,
+              itemBuilder: (context, index) {
+                final item = assignments[index];
 
-          return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AssignmentDetailScreen(
-                    title: item['title']!,
-                    due: item['due']!,
-                    status: item['status']!,
-                    content: item['content']!,
-                  ),
-                ),
-              );
-            },
-            child: _assignmentCard(item),
-          );
-        },
-      ),
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AssignmentDetailScreen(
+                          title: item['title'],
+                          due: _formatDueText(item['deadline'], item['closed']),
+                          status: item['status'],
+                          content: item['content'],
+                        ),
+                      ),
+                    );
+                  },
+                  child: _assignmentCard(item),
+                );
+              },
+            ),
     );
   }
 
-  Widget _assignmentCard(Map<String, String> item) {
+  Widget _assignmentCard(Map<String, dynamic> item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -67,32 +116,69 @@ class AssignmentScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item['title']!,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['title'],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(item['due']!, style: const TextStyle(color: Colors.grey)),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  _formatDueText(item['deadline'], item['closed']),
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
           ),
-
-          _statusChip(item['status']!),
+          const SizedBox(width: 12),
+          _statusChip(item['status'], item['closed']),
         ],
       ),
     );
   }
 
-  Widget _statusChip(String status) {
-    Color color;
+  String _formatDueText(String? deadline, bool closed) {
+    if (deadline == null) {
+      return '기한 없음';
+    }
 
-    if (status == '미제출') {
+    final DateTime dueDate = DateTime.parse(deadline);
+    final DateTime today = DateTime.now();
+    final DateTime dueOnlyDate = DateTime(
+      dueDate.year,
+      dueDate.month,
+      dueDate.day,
+    );
+    final DateTime todayOnlyDate = DateTime(today.year, today.month, today.day);
+    final int diffDays = dueOnlyDate.difference(todayOnlyDate).inDays;
+
+    if (closed || diffDays < 0) {
+      return '기한 마감';
+    }
+
+    if (diffDays == 0) {
+      return 'D-Day';
+    }
+
+    return 'D-$diffDays';
+  }
+
+  Widget _statusChip(String status, bool closed) {
+    Color color;
+    String label = status;
+
+    if (closed && status == '미제출') {
       color = Colors.red;
+      label = '기한 마감';
+    } else if (status == '미제출') {
+      color = Colors.grey;
     } else {
       color = Colors.blue;
     }
@@ -104,7 +190,7 @@ class AssignmentScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        status,
+        label,
         style: TextStyle(color: color, fontWeight: FontWeight.bold),
       ),
     );
