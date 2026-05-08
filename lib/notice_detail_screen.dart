@@ -65,6 +65,7 @@ class NoticeDetailScreen extends StatelessWidget {
 
       final String? imageSrc = match.group(1);
       final String? imageUrl = _getFullImageUrl(imageSrc);
+      debugPrint('공지 이미지 URL: $imageUrl');
 
       if (imageUrl != null) {
         widgets.add(
